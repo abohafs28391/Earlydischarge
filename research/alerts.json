@@ -1,0 +1,74 @@
+[
+  {
+    "url": "https://oxmaint.com",
+    "name": "Hospital Command Center: Real-Time Operations",
+    "snippet": "Apr 18, 2026 — Command Center pulls patient flow, bed status, OR throughput, and facility events into one executive dashboard — with escalation logic that ...",
+    "host_name": "oxmaint.com",
+    "rank": 0,
+    "date": "Apr 18, 2026",
+    "favicon": ""
+  },
+  {
+    "url": "https://pmc.ncbi.nlm.nih.gov",
+    "name": "A Real-Time Autonomous Dashboard for the Emergency",
+    "snippet": "by J Yoo · 2018 · Cited by 63 — This study aimed to describe the development of a real - time autonomous dashboard for the ED and to perspectives of clinical staff on its usability.",
+    "host_name": "pmc.ncbi.nlm.nih.gov",
+    "rank": 1,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.striim.com",
+    "name": "Realtime Data for Healthcare: Emergency Room Monitoring",
+    "snippet": "This tutorial aims to show the significance of healthcare monitoring through a real - time data dashboard , providing insights into how these tools can ...",
+    "host_name": "www.striim.com",
+    "rank": 2,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.oracle.com",
+    "name": "Health System Operations",
+    "snippet": "Oracle Health Patient Flow provides near real-time, contextually aware metrics—including bed use, length of stay, pending transfers, and discharge details—to ... Read more",
+    "host_name": "www.oracle.com",
+    "rank": 3,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.epicshare.org",
+    "name": "A Comprehensive Approach to Patient Flow: Analytics",
+    "snippet": "Oct 21, 2024 — They review Bed Huddle and Patient Flow dashboards in Epic that show current capacity, expected admissions, and patients nearing discharge . Read more",
+    "host_name": "www.epicshare.org",
+    "rank": 4,
+    "date": "Oct 21, 2024",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.mokkup.ai",
+    "name": "Real-Time Healthcare Dashboards: Benefits, Use Cases &",
+    "snippet": "A good dashboard will have automated alerts for escalating issues . It can also notify clinicians of medication delays or abnormalities so that proactive ...",
+    "host_name": "www.mokkup.ai",
+    "rank": 5,
+    "date": "",
+    "favicon": ""
+  },
+  {
+    "url": "https://kontakt.io",
+    "name": "Patient Tracking Tools: Admission to Discharge in Hospitals",
+    "snippet": "Mar 26, 2024 — Real - time locating systems (RTLS) are local tracking systems that identify the physical locations of personnel and equipment in real time .",
+    "host_name": "kontakt.io",
+    "rank": 6,
+    "date": "Mar 26, 2024",
+    "favicon": ""
+  },
+  {
+    "url": "https://www.ascom.com",
+    "name": "Clinical Alarm and Alert Management in hospitals - Ascom",
+    "snippet": "Contextual alarm notifications provide near- real - time patient data, live waveforms and snapshots to enhance situational awareness; Proactive alarm management ... Read more",
+    "host_name": "www.ascom.com",
+    "rank": 7,
+    "date": "",
+    "favicon": ""
+  }
+]

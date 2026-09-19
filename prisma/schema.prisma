@@ -1,0 +1,180 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Staff accounts. Role gates what each user may do on the board:
+//   NURSE     -> floor-scoped (one or MORE floors — admins multi-select); drives
+//                the financial-notification email and the physical discharge
+//   PHYSICIAN -> sees only patients of their own specialty; may medically
+//                clear those patients
+//   FINANCE   -> may clear patients financially; everything else read-only
+//   RECEPTION -> confirms the discharge papers once a patient is financially
+//                cleared, marking them ready for physical discharge
+//   UNIVERSAL -> managers & quality: hospital-wide read-only visibility
+//   ADMIN     -> system owner: sets every user's edit/view privilege, demos
+//                any user view (read-only), configures alarm rules & webhooks
+// subcategory refines UNIVERSAL users ("MANAGER" | "QUALITY").
+// canEdit/canView are the privilege flags ONLY ADMINs may change:
+//   canView=false -> the board is hidden for that account entirely
+//   canEdit=false -> the account is in view-only mode (actions disabled)
+// (SQLite does not support Prisma enums — role is a validated string.)
+model User {
+  id          String   @id @default(cuid())
+  name        String
+  role        String // NURSE | PHYSICIAN | FINANCE | RECEPTION | UNIVERSAL | ADMIN
+  floors      String? // nurses only — JSON int array of assigned floors, e.g. "[1,2]"; multi-floor nurses pick the floor they are working on
+  specialty   String? // physicians only — may see & clear patients of this specialty
+  subcategory String? // universal only — MANAGER | QUALITY
+  canEdit     Boolean  @default(true) // privilege set by admins
+  canView     Boolean  @default(true) // privilege set by admins
+  createdAt   DateTime @default(now())
+
+  actions       Action[]
+  notifications Notification[]
+
+  @@index([role])
+}
+
+// One row per imported patient moving through the discharge pipeline:
+//   1 Medical clearance -> 2 Notify financial team (email template)
+//   -> 3 Financial clearance -> 4 Reception (papers done) -> 5 Physical
+//   discharge. Once financially cleared a patient appears in BOTH the
+//   Reception and the Physical Discharge columns until it leaves.
+// Every step stores BOTH when (timestamp) and who (user id) — mirrored in
+// the append-only Action table for the audit trail.
+model Patient {
+  id       String  @id @default(cuid())
+  mrn      String  @unique
+  name     String
+  room     String // room/bed code, e.g. "201" -> floor 2 (number coding)
+  floor    Int // derived from room coding unless explicitly provided
+  doctorName      String // assigned doctor (from import)
+  doctorSpecialty String // assigned doctor specialty — gates medical clearance
+  isDemo   Boolean @default(false)
+  importedAt DateTime @default(now())
+
+  // Stage 1 decision: the physician explicitly records Discharge vs No
+  // discharge. A DISCHARGE decision only advances the patient after the
+  // decision window (default 60s, admin-adjustable via the "decision.window.sec"
+  // setting) — during which the physician can undo or change it.
+  medicalDecision     String? // DISCHARGE | NO_DISCHARGE (null = not decided yet)
+  medicalDecisionAt   DateTime?
+  medicalDecisionById String?
+
+  // Stage 1 -> 2: medical clearance — stamped automatically once a DISCHARGE
+  // decision outlives the confirmation window (physician of matching specialty)
+  medicalReadyAt   DateTime?
+  medicalReadyById String?
+
+  // Stage 2: nurse notifies the financial team via email template
+  templateCopiedAt    DateTime? // nurse clicked "Copy template"
+  templateCopiedById  String?
+  templateBody        String? // final (revised) template text at copy time
+  financeNotifiedAt   DateTime? // nurse marked the notification stage completed
+  financeNotifiedById String?
+
+  // Stage 3 -> 4: financial clearance (financial team)
+  financeClearedAt   DateTime?
+  financeClearedById String?
+
+  // Stage 4: reception (reception personnel) -> 5 physical discharge (nurse)
+  receptionReadyAt   DateTime? // reception confirmed all papers are done
+  receptionReadyById String?
+  physicalDischargedAt   DateTime?
+  physicalDischargedById String?
+
+  actions        Action[]
+  notifications  Notification[]
+  webhookDeliveries WebhookDelivery[]
+
+  @@index([floor])
+  @@index([importedAt])
+  @@index([isDemo])
+}
+
+// Append-only audit log: one row per logged step (who + when + what).
+model Action {
+  id        String   @id @default(cuid())
+  patientId String
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String // IMPORTED | MEDICAL_READY | COPY_TEMPLATE | FINANCE_NOTIFIED | FINANCE_CLEARED | RECEPTION_READY | PHYSICAL_DISCHARGED
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([patientId, createdAt])
+  @@index([createdAt])
+}
+
+// In-app notifications, addressed to task owners (who + when + what about).
+//   type=HANDOFF -> "patient is now waiting for your stage"
+//   type=ALARM   -> "patient exceeded a stage threshold (alarm rule)"
+// dedupeKey keeps evaluation idempotent, e.g.
+//   "handoff:2:<patientId>:<userId>" or "alarm:<ruleId>:<patientId>:<userId>"
+model Notification {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  patientId  String?
+  patient    Patient?  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  type       String // HANDOFF | ALARM
+  title      String
+  body       String
+  dedupeKey  String    @unique
+  createdAt  DateTime  @default(now())
+  readAt     DateTime?
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+}
+
+// Admin-configurable alarm rules. When a patient's current stage duration
+// crosses thresholdMin, the rule fires: notifies the stage's task owners
+// in-app and POSTs a webhook (per-rule URL or the global default).
+model AlarmRule {
+  id              String   @id @default(cuid())
+  name            String
+  stage           Int // 1..5 — the pipeline stage the rule watches
+  level           String // WARN | LATE
+  thresholdMin    Int
+  notifyTaskOwner Boolean  @default(true)
+  webhookUrl      String? // falls back to the global webhook setting when null
+  enabled         Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now())
+
+  deliveries WebhookDelivery[]
+
+  @@index([stage])
+}
+
+// Outbound webhook delivery log (one row per attempted POST — alarms and
+// admin "test webhook" pings). dedupeKey prevents duplicate alarm sends.
+model WebhookDelivery {
+  id          String    @id @default(cuid())
+  alarmRuleId String?
+  alarmRule   AlarmRule? @relation(fields: [alarmRuleId], references: [id], onDelete: SetNull)
+  patientId   String?
+  patient     Patient?  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  url         String
+  event       String // alarm | test
+  payload     String // JSON sent
+  ok          Boolean
+  status      String? // HTTP status or error summary
+  dedupeKey   String? @unique
+  createdAt   DateTime  @default(now())
+
+  @@index([createdAt])
+}
+
+// Simple key/value app settings (e.g. the global default webhook URL).
+model Setting {
+  key   String @id
+  value String
+}
